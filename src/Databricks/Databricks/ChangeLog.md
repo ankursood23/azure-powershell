@@ -18,6 +18,8 @@
         - Additional information about change #1
 -->
 ## Upcoming Release
+
+## Version 1.8.2
 * test
 
 ## Version 1.8.1
