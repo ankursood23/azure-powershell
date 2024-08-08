@@ -146,6 +146,7 @@ namespace VersionController.Models
             IEnumerable<string> commonAssemblies = null;
             using (PowerShell powershell = PowerShell.Create())
             {
+                // for LTS, check latest LTS Accounts instead of STS Accounts.
                 powershell.AddScript("Save-Module -Name Az.Accounts -Repository PSGallery -Path " + outputModuleDirectory );
                 var cmdletResult = powershell.Invoke();
             }

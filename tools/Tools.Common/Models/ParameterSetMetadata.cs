@@ -13,7 +13,11 @@
 // ----------------------------------------------------------------------------------
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+
+using VersionController.Netcore.Models;
 
 namespace Tools.Common.Models
 {
@@ -60,11 +64,11 @@ namespace Tools.Common.Models
                 {
                     return false;
                 }
-
                 paramsSetEqual &= thisParameter.Equals(otherParameter);
             }
 
-            paramsSetEqual &= this.Parameters.Count == other.Parameters.Count;
+            paramsSetEqual &= (this.Parameters.Where(p => !CommonInfo.ExcludedParameters.Contains(p.ParameterMetadata.Name)).ToList().Count == 
+                other.Parameters.Where(p => !CommonInfo.ExcludedParameters.Contains(p.ParameterMetadata.Name)).ToList().Count);
             return paramsSetEqual;
         }
 

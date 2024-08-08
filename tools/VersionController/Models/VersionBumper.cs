@@ -22,6 +22,8 @@ using System.Text.RegularExpressions;
 using Tools.Common.Models;
 using Tools.Common.Utilities;
 
+using VersionController.Netcore.Models;
+
 namespace VersionController.Models
 {
     public class VersionBumper
@@ -42,13 +44,16 @@ namespace VersionController.Models
         public AzurePSVersion MinimalVersion { get; set; }
         public string PSRepositories { get; set; }
 
-        public VersionBumper(VersionFileHelper fileHelper, IList<string> changedModules)
+        private ReleaseType _releaseType { get; set; }
+
+        public VersionBumper(VersionFileHelper fileHelper, IList<string> changedModules, ReleaseType releaseType = ReleaseType.STS)
         {
             _fileHelper = fileHelper;
             _metadataHelper = new VersionMetadataHelper(_fileHelper);
             _loggerFactory = LoggerFactory.Create(builder => builder.AddConsole().AddDebug());
             _logger = _loggerFactory.CreateLogger<VersionBumper>();
             _changedModules = changedModules;
+            _releaseType = releaseType;
         }
 
         /// <summary>
@@ -88,14 +93,15 @@ namespace VersionController.Models
         private string GetLatestAccountsVersion()
         {
             var localVersion = GetLocalAccountsVersion();
-            var version = GetAccountsVersionFromPSGallery();
-            if(!string.IsNullOrEmpty(localVersion) && !string.IsNullOrEmpty(version))
+
+            var version = _releaseType == ReleaseType.STS ? GetAccountsVersionFromPSGallery() : GetLatestAccountsVersionInLTSFromPSGallery();
+            if (!string.IsNullOrEmpty(localVersion) && !string.IsNullOrEmpty(version))
             {
                 return new System.Version(localVersion).CompareTo(value: new System.Version(version)) > 0 ? localVersion : version;
-            }else if (string.IsNullOrEmpty(localVersion))
+            } else if (string.IsNullOrEmpty(localVersion))
             {
                 return version;
-            }else if (string.IsNullOrEmpty(version))
+            } else if (string.IsNullOrEmpty(version))
             {
                 return localVersion;
             }
@@ -103,7 +109,23 @@ namespace VersionController.Models
             {
                 throw new Exception("Can not find the latest version for Az.Accounts.");
             }
+        }
 
+        /// <summary>
+        /// Get the version of latest Az.Accounts in LTS status from PSGallery
+        /// </summary>
+        /// <returns></returns>
+        private string GetLatestAccountsVersionInLTSFromPSGallery()
+        {
+            string version = null;
+            using (PowerShell powershell = PowerShell.Create())
+            {
+                powershell.AddScript("((Find-Module Az -Repository PSGallery -AllVersions | Where-Object {[System.Version]$_.Major%2 -eq 0} | Sort-Object {[System.Version]$_.Version} -Descending)[0].Dependencies | Where-Object {$_.Name -eq 'Az.Accounts'})[1]");
+                var cmdletResult = powershell.Invoke();
+                version = cmdletResult[0]?.ToString();
+            }
+            // Console.WriteLine("The LTS version of Az.Accounts in PSGallery is " + version );
+            return version;
         }
 
         /// <summary>
@@ -114,7 +136,7 @@ namespace VersionController.Models
         {
 
             // Assume in outputModuleDirectory/../Az.Accounts/Az.Accounts.psd1 exists
-            var accountsOutputDirectory = Path.Combine(Directory.GetParent(_fileHelper.OutputModuleDirectory).FullName,  "Az.Accounts");
+            var accountsOutputDirectory = Path.Combine(Directory.GetParent(_fileHelper.OutputModuleDirectory).FullName, "Az.Accounts");
             var accountsManifest = Directory.GetFiles(accountsOutputDirectory, "Az.Accounts.psd1", SearchOption.TopDirectoryOnly)
                                             .FirstOrDefault();
 
@@ -161,7 +183,7 @@ namespace VersionController.Models
             bool localPreview = false;
             // bool localPreview = false, psPreview = false, testPreview = false;
             var moduleName = _fileHelper.ModuleName;
-            
+
             using (PowerShell powershell = PowerShell.Create())
             {
                 powershell.AddScript("$metadata = Test-ModuleManifest -Path " + _fileHelper.OutputModuleManifestPath + ";$metadata.Version;$metadata.PrivateData.PSData.Prerelease");
@@ -221,38 +243,26 @@ namespace VersionController.Models
                 versionBump = Version.MINOR;
             }
 
-            var bumpedVersion = GetBumpedVersionByType(new AzurePSVersion(_oldVersion), versionBump);
-            
             List<AzurePSVersion> galleryVersion = GetGalleryVersion();
+            AzurePSVersion bumpedVersion = galleryVersion.Count == 0 ? new AzurePSVersion(0, 1, 0) : GetBumpedVersionByType(new AzurePSVersion(_oldVersion), versionBump);
+            AzurePSVersion maxGAedVersionInGallery = GetMaxVersionInGallery(bumpedVersion, galleryVersion, false);
+            AzurePSVersion maxPreGAedVersionInGallery = GetMaxVersionInGallery(bumpedVersion, galleryVersion, true);
 
-            AzurePSVersion maxGalleryGAVersion = new AzurePSVersion("0.0.0");
-            foreach(var version in galleryVersion)
+            // Continue bumping version until bumpedVersion is higher than maxGAedVersionInGallery in same major version
+            while (maxGAedVersionInGallery >= bumpedVersion)
             {
-                if (version.Major == bumpedVersion.Major && !version.IsPreview && version > maxGalleryGAVersion)
-                {
-                    maxGalleryGAVersion = version;
-                }
-            }
-
-            if (galleryVersion.Count == 0)
-            {
-                bumpedVersion = new AzurePSVersion(0, 1, 0);
-            }
-            else if (maxGalleryGAVersion >= bumpedVersion)
-            {
-                string errorMsg = $"The GA version of {moduleName} in gallery ({maxGalleryGAVersion}) is greater or equal to the bumped version({bumpedVersion}).";
-                _logger.LogError(errorMsg);
-                throw new Exception(errorMsg);
-            }
-            else if (HasGreaterPreviewVersion(bumpedVersion, galleryVersion))
-            {
-                while(HasGreaterPreviewVersion(bumpedVersion, galleryVersion))
-                {
-                    bumpedVersion = GetBumpedVersionByType(bumpedVersion, Version.MINOR);
-                }
-                _logger.LogWarning("There existed greater preview version in the gallery.");
+                string warningMsg = $"The GA version of {moduleName} in gallery ({maxGAedVersionInGallery}) is greater or equal to the bumped version({bumpedVersion}). Continue bumping version for {moduleName}.";
+                _logger.LogWarning(warningMsg);
+                bumpedVersion = GetBumpedVersionByType(bumpedVersion, versionBump);
             }
 
+            // Continue bumping version until bumpedVersion is higher than maxPreGAedVersionInGallery in same major version
+            while (maxPreGAedVersionInGallery >= bumpedVersion)
+            {
+                _logger.LogWarning($"There is greater preview version in the gallery. Continue bumping version for ${moduleName}");
+                bumpedVersion = GetBumpedVersionByType(bumpedVersion, Version.MINOR);
+            }
+            
             return bumpedVersion.ToString();
         }
 
@@ -294,7 +304,7 @@ namespace VersionController.Models
                 var cmdletResult = powershell.Invoke();
                 foreach (var versionInformation in cmdletResult)
                 {
-                    if(versionInformation.Properties["Version"]?.Value != null)
+                    if (versionInformation.Properties["Version"]?.Value != null)
                     {
                         galleryVersion.Add(new AzurePSVersion(versionInformation.Properties["Version"]?.Value?.ToString()));
                     }
@@ -303,20 +313,23 @@ namespace VersionController.Models
             return galleryVersion.ToList();
         }
 
+
         /// <summary>
         /// Under the same Major version, check if there exist preview version in gallery that has greater version.
         /// </summary>
         /// <returns>True if exist a version, false otherwise.</returns>
-        private bool HasGreaterPreviewVersion(AzurePSVersion version, List<AzurePSVersion> galleryVersion)
+        private AzurePSVersion GetMaxVersionInGallery(AzurePSVersion bumpedVersion, List<AzurePSVersion> galleryVersion, bool IsPreview)
         {
-            foreach (var gaVersion in galleryVersion)
+            var maxVersionInGallery = new AzurePSVersion(0, 0, 0);
+
+            foreach (var version in galleryVersion)
             {
-                if (gaVersion.Major == version.Major && gaVersion >= version)
+                if (version.Major == bumpedVersion.Major && (version.IsPreview == IsPreview) && version > maxVersionInGallery)
                 {
-                    return true;
+                    maxVersionInGallery = version;
                 }
             }
-            return false;
+            return maxVersionInGallery;
         }
 
         /// <summary>

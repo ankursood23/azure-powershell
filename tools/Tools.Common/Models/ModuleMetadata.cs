@@ -89,7 +89,6 @@ namespace Tools.Common.Models
                 {
                     return false;
                 }
-
                 modulesEqual &= thisCmdlet.Equals(otherCmdlet);
             }
 
