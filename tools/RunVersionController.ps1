@@ -21,7 +21,11 @@ Param(
     [string]$GalleryName = "PSGallery",
 
     [Parameter()]
-    [string]$ArtifactsOutputPath = "$PSScriptRoot/../artifacts/Release/"
+    [string]$ArtifactsOutputPath = "$PSScriptRoot/../artifacts/Release/",
+
+    [Parameter()]
+    [ValidateSet("STS", "LTS")]
+    [string]$ReleaseType = "STS"
 )
 
 enum PSVersion
@@ -482,8 +486,8 @@ switch ($PSCmdlet.ParameterSetName)
 {
     "ReleaseSingleModule"
     {
-        Write-Host executing dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $PSScriptRoot/../artifacts/VersionController/Exceptions $ModuleName
-        dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $PSScriptRoot/../artifacts/VersionController/Exceptions $ModuleName
+        Write-Host executing dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $PSScriptRoot/../artifacts/VersionController/Exceptions $ModuleName $ReleaseType
+        dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $PSScriptRoot/../artifacts/VersionController/Exceptions $ModuleName $ReleaseType
         Update-AzPreview
     }
 
@@ -521,8 +525,8 @@ switch ($PSCmdlet.ParameterSetName)
             }
         }
 
-        Write-Host executing dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll
-        dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll
+        Write-Host executing dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $ReleaseType
+        dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $ReleaseType
 
         $versionBump = Bump-AzVersion
         # Each release needs to update AzPreview.psd1 and dotnet csv

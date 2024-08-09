@@ -94,7 +94,7 @@ namespace VersionController.Models
         {
             var localVersion = GetLocalAccountsVersion();
 
-            var version = _releaseType == ReleaseType.STS ? GetAccountsVersionFromPSGallery() : GetLatestAccountsVersionInLTSFromPSGallery();
+            var version = ModuleHelper.GetLatestVersionFromPSGallery("Az.Accounts", _releaseType);
             if (!string.IsNullOrEmpty(localVersion) && !string.IsNullOrEmpty(version))
             {
                 return new System.Version(localVersion).CompareTo(value: new System.Version(version)) > 0 ? localVersion : version;
@@ -109,23 +109,6 @@ namespace VersionController.Models
             {
                 throw new Exception("Can not find the latest version for Az.Accounts.");
             }
-        }
-
-        /// <summary>
-        /// Get the version of latest Az.Accounts in LTS status from PSGallery
-        /// </summary>
-        /// <returns></returns>
-        private string GetLatestAccountsVersionInLTSFromPSGallery()
-        {
-            string version = null;
-            using (PowerShell powershell = PowerShell.Create())
-            {
-                powershell.AddScript("((Find-Module Az -Repository PSGallery -AllVersions | Where-Object {[System.Version]$_.Major%2 -eq 0} | Sort-Object {[System.Version]$_.Version} -Descending)[0].Dependencies | Where-Object {$_.Name -eq 'Az.Accounts'})[1]");
-                var cmdletResult = powershell.Invoke();
-                version = cmdletResult[0]?.ToString();
-            }
-            // Console.WriteLine("The LTS version of Az.Accounts in PSGallery is " + version );
-            return version;
         }
 
         /// <summary>
@@ -151,23 +134,6 @@ namespace VersionController.Models
             }
             // Console.WriteLine("The version of Az.Accounts in local is " + localVersion);
             return localPreview ? null : localVersion;
-        }
-
-        /// <summary>
-        /// Get the latest version of Az.Accounts from PSGallery
-        /// </summary>
-        /// <returns></returns>
-        private string GetAccountsVersionFromPSGallery()
-        {
-            string version = null;
-            using (PowerShell powershell = PowerShell.Create())
-            {
-                powershell.AddScript("(Find-Module Az.Accounts -Repository PSGallery -AllVersions | Sort-Object {[System.Version]$_.Version} -Descending)[0].Version");
-                var cmdletResult = powershell.Invoke();
-                version = cmdletResult[0]?.ToString();
-            }
-            // Console.WriteLine("The version of Az.Accounts in PSGallery is " + version );
-            return version;
         }
 
         /// <summary>
@@ -212,7 +178,7 @@ namespace VersionController.Models
             var versionBump = _metadataHelper.GetVersionBumpUsingSerialized();
             if (string.Equals(moduleName, "Az.Accounts"))
             {
-                var commonCodeVersionBump = _metadataHelper.GetVersionBumpForCommonCode();
+                var commonCodeVersionBump = _metadataHelper.GetVersionBumpForCommonCode(_releaseType);
                 if (commonCodeVersionBump == Version.MAJOR)
                 {
                     throw new Exception("Breaking change detected in common code.");
@@ -243,10 +209,10 @@ namespace VersionController.Models
                 versionBump = Version.MINOR;
             }
 
-            List<AzurePSVersion> galleryVersion = GetGalleryVersion();
+            List<AzurePSVersion> galleryVersion = ModuleHelper.GetAllVersionsFromGallery(_fileHelper.ModuleName, PSRepositories);
             AzurePSVersion bumpedVersion = galleryVersion.Count == 0 ? new AzurePSVersion(0, 1, 0) : GetBumpedVersionByType(new AzurePSVersion(_oldVersion), versionBump);
-            AzurePSVersion maxGAedVersionInGallery = GetMaxVersionInGallery(bumpedVersion, galleryVersion, false);
-            AzurePSVersion maxPreGAedVersionInGallery = GetMaxVersionInGallery(bumpedVersion, galleryVersion, true);
+            AzurePSVersion maxGAedVersionInGallery = ModuleHelper.GetLatestVersionFromGalleryUnderSameMajorVersion(bumpedVersion, galleryVersion, false);
+            AzurePSVersion maxPreGAedVersionInGallery = ModuleHelper.GetLatestVersionFromGalleryUnderSameMajorVersion(bumpedVersion, galleryVersion, true);
 
             // Continue bumping version until bumpedVersion is higher than maxGAedVersionInGallery in same major version
             while (maxGAedVersionInGallery >= bumpedVersion)
@@ -288,48 +254,6 @@ namespace VersionController.Models
                 bumpedVersion = new AzurePSVersion(version.Major, version.Minor, version.Patch + 1, version.Label);
             }
             return bumpedVersion;
-        }
-
-        /// <summary>
-        /// Get version from PSGallery and TestGallery and merge into one list.
-        /// </summary>
-        /// <returns>A list of version</returns>
-        private List<AzurePSVersion> GetGalleryVersion()
-        {
-            var moduleName = _fileHelper.ModuleName;
-            HashSet<AzurePSVersion> galleryVersion = new HashSet<AzurePSVersion>();
-            using (PowerShell powershell = PowerShell.Create())
-            {
-                powershell.AddScript($"Find-Module -Name {moduleName} -Repository {PSRepositories} -AllowPrerelease -AllVersions");
-                var cmdletResult = powershell.Invoke();
-                foreach (var versionInformation in cmdletResult)
-                {
-                    if (versionInformation.Properties["Version"]?.Value != null)
-                    {
-                        galleryVersion.Add(new AzurePSVersion(versionInformation.Properties["Version"]?.Value?.ToString()));
-                    }
-                }
-            }
-            return galleryVersion.ToList();
-        }
-
-
-        /// <summary>
-        /// Under the same Major version, check if there exist preview version in gallery that has greater version.
-        /// </summary>
-        /// <returns>True if exist a version, false otherwise.</returns>
-        private AzurePSVersion GetMaxVersionInGallery(AzurePSVersion bumpedVersion, List<AzurePSVersion> galleryVersion, bool IsPreview)
-        {
-            var maxVersionInGallery = new AzurePSVersion(0, 0, 0);
-
-            foreach (var version in galleryVersion)
-            {
-                if (version.Major == bumpedVersion.Major && (version.IsPreview == IsPreview) && version > maxVersionInGallery)
-                {
-                    maxVersionInGallery = version;
-                }
-            }
-            return maxVersionInGallery;
         }
 
         /// <summary>

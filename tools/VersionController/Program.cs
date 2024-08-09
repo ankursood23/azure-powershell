@@ -54,7 +54,7 @@ namespace VersionController
             ConsolidateExceptionFiles(_exceptionsDirectory);
             ValidateManifest();
             if (_generateSyntaxChangelog) {
-                // GenerateSyntaxChangelog(_rootDirectory);
+                GenerateSyntaxChangelog(_rootDirectory);
             }
             BumpVersions();
         }
