@@ -17,7 +17,7 @@ namespace VersionController.Netcore.Models
 
             string version = null;
             string findModuleScript = releaseType == ReleaseType.STS ? $"Find-Module {moduleName} -Repository PSGallery -AllVersions" : "Find-Module Az -Repository PSGallery -AllVersions";
-            string filterRequiredReleaseTypeScript = releaseType == ReleaseType.STS ? "" : "| Where-Object {[System.Version]$_.Major%2 -eq 0}";
+            string filterRequiredReleaseTypeScript = releaseType == ReleaseType.STS ? "" : "| Where-Object {([System.Version]($_.Version)).Major%2 -eq 0}";
             string sortModuleScript = "| Sort-Object {[System.Version]$_.Version} -Descending";
             string getLastModuleVersionScript = releaseType == ReleaseType.STS ? 
                 $"({findModuleScript}{filterRequiredReleaseTypeScript}{sortModuleScript})[0].Version" :

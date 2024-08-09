@@ -306,7 +306,8 @@ namespace VersionController.Models
             var pattern = @"ModuleName(\s*)=(\s*)(['\""])" + moduleName + @"(['\""])(\s*);(\s*)RequiredVersion(\s*)=(\s*)(['\""])" + _oldVersion + @"(['\""])";
             var updatedFile = file.Select(l => Regex.Replace(l, pattern, "ModuleName = '" + moduleName + "'; RequiredVersion = '" + _newVersion + "'"));
             var pattern2 = @"ModuleName(\s*)=(\s*)(['\""])" + moduleName + @"(['\""])(\s*);(\s*)ModuleVersion(\s*)=(\s*)(['\""])" + _oldVersion + @"(['\""])";
-            var updatedFile2 = updatedFile.Select(l => Regex.Replace(l, pattern2, "ModuleName = '" + moduleName + "'; ModuleVersion = '" + _newVersion + "'"));
+            var updatedFile2 = _releaseType == ReleaseType.STS ? updatedFile.Select(l => Regex.Replace(l, pattern2, "ModuleName = '" + moduleName + "'; ModuleVersion = '" + _newVersion + "'")) :
+                updatedFile.Select(l => Regex.Replace(l, pattern2, "ModuleName = '" + moduleName + "'; RequiredVersion = '" + _newVersion + "'"));
             File.WriteAllLines(rollupModuleManifestPath, updatedFile2);
         }
 
@@ -385,14 +386,28 @@ namespace VersionController.Models
             // Get required module list and update Az,Accounts' version
             var getRequiredModulesScript = "Import-LocalizedData -BaseDirectory " + outputModuleDirectory + " -FileName " + Path.GetFileName(outputModuleManifestPath) + " -BindingVariable moduleInfo;";
             getRequiredModulesScript += "$requiredModules = @();";
-            getRequiredModulesScript += "$moduleInfo.RequiredModules.ForEach({ " +
-                        "if ($_.ModuleName -eq \"Az.Accounts\"){ " +
-                        "  $requiredModules += @{ModuleName = \"Az.Accounts\"; ModuleVersion = \"" + _accountsVersion + "\"} " +
-                        "}else " +
-                        "{ " +
-                        "  $requiredModules += $_ " +
-                        "} " +
-                      "});";
+            if(_releaseType == ReleaseType.STS)
+            {
+                getRequiredModulesScript += "$moduleInfo.RequiredModules.ForEach({ " +
+                            "if ($_.ModuleName -eq \"Az.Accounts\"){ " +
+                            "  $requiredModules += @{ModuleName = \"Az.Accounts\"; ModuleVersion = \"" + _accountsVersion + "\"} " +
+                            "}else " +
+                            "{ " +
+                            "  $requiredModules += $_ " +
+                            "} " +
+                          "});";
+            }
+            else
+            {
+                getRequiredModulesScript += "$moduleInfo.RequiredModules.ForEach({ " +
+                            "if ($_.ModuleName -eq \"Az.Accounts\"){ " +
+                            "  $requiredModules += @{ModuleName = \"Az.Accounts\"; RequiredVersion = \"" + _accountsVersion + "\"} " +
+                            "}else " +
+                            "{ " +
+                            "  $requiredModules += $_ " +
+                            "} " +
+                          "});";
+            }
 
             // Update module manifest
             script += getRequiredModulesScript;

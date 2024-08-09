@@ -54,7 +54,7 @@ namespace VersionController
             ConsolidateExceptionFiles(_exceptionsDirectory);
             ValidateManifest();
             if (_generateSyntaxChangelog) {
-                GenerateSyntaxChangelog(_rootDirectory);
+               GenerateSyntaxChangelog(_rootDirectory);
             }
             BumpVersions();
         }
@@ -108,6 +108,7 @@ namespace VersionController
         {
             _syntaxChangelogGenerator.Analyze(projectDirectories);
         }
+
         private static void ValidateManifest()
         {
             foreach (var directory in _projectDirectories)
