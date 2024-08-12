@@ -106,7 +106,13 @@ namespace VersionController
 
         private static void GenerateSyntaxChangelog(string projectDirectories)
         {
-            _syntaxChangelogGenerator.Analyze(projectDirectories);
+            try
+            {
+                _syntaxChangelogGenerator.Analyze(projectDirectories);
+            }
+            catch (Exception ex) {
+                Console.WriteLine($"Warning: Cannot generate syntax change log because {ex.Message}");
+            }
         }
 
         private static void ValidateManifest()
