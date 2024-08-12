@@ -530,8 +530,8 @@ switch ($PSCmdlet.ParameterSetName)
             }
         }
 
-        # Write-Host executing dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $ReleaseType
-        # dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $ReleaseType
+        Write-Host executing dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $ReleaseType
+        dotnet $PSScriptRoot/../artifacts/VersionController/VersionController.Netcore.dll $ReleaseType
 
         $versionBump = Bump-AzVersion
         # Each release needs to update AzPreview.psd1 and dotnet csv
