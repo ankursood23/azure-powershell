@@ -3,6 +3,15 @@
 variables:
   today: $(Get-Date -Format yyyyMMddhhmmss)
 
+parameters:
+- name: ReleaseType
+  displayName: Release Type
+  type: string
+  default: STS
+  values:
+  - STS
+  - LTS
+
 schedules:
 - cron: "0 18 * * *"
   displayName: 2:00 AM (UTC + 8:00) China Daily Build
@@ -58,7 +67,7 @@ jobs:
       script: |
         $command = "`$PSVersionTable `
         Get-PSRepository `
-        ./tools/RunVersionController.ps1 -Release 'Daily Build $(today)' `
+        ./tools/RunVersionController.ps1 -Release 'Daily Build $(today)' -ReleaseType ${{ parameters.ReleaseType }}`
         Exit"
         dotnet tool run pwsh -c $command
 
